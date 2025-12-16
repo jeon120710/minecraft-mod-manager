@@ -7,8 +7,10 @@ from PySide6.QtCore import Qt
 from pathlib import Path
 import re
 from core.update_mod import rollback_mod
+from core.app_path import get_app_data_dir
 
-LOG_FILE = Path("update_log.txt")
+APP_DATA_DIR = get_app_data_dir()
+LOG_FILE = APP_DATA_DIR / "update_log.txt"
 
 class LogViewerDialog(QDialog):
     def __init__(self, parent=None):
