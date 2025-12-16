@@ -4,8 +4,10 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 from core.mod_scanner import get_minecraft_dir
+from core.app_path import get_app_data_dir
 
-LOG_FILE = Path("update_log.txt")
+APP_DATA_DIR = get_app_data_dir()
+LOG_FILE = APP_DATA_DIR / "update_log.txt"
 
 def update_mod(mod):
     mods_dir = get_minecraft_dir() / "mods"
