@@ -228,3 +228,60 @@ class MainWindow(QWidget):
             self.initial_load_finished.emit()
 
         self.worker = None
+
+    def update_selected_mods(self):
+        selected_rows = []
+        for row in range(self.table.rowCount()):
+            checkbox = self.table.cellWidget(row, 0).layout().itemAt(0).widget()
+            if checkbox.isChecked():
+                selected_rows.append(row)
+        if not selected_rows:
+            QMessageBox.warning(self, "경고", "업데이트할 모드를 선택하세요.")
+            return
+        
+        # UX 개선: 여러 모드 업데이트 시 한 번만 확인
+        mods_to_update = []
+        for row in selected_rows:
+            mod = self.mods[row]
+            if mod.get("status") == "업데이트 가능":
+                mods_to_update.append(mod)
+
+        if not mods_to_update:
+            QMessageBox.information(self, "알림", "선택된 모드 중 업데이트 가능한 항목이 없습니다.")
+            return
+
+        mod_names = ", ".join([f"'{m['mod_name']}'" for m in mods_to_update])
+        reply = QMessageBox.question(self, "업데이트 확인", f"{mod_names} 모드를 업데이트하시겠습니까?", QMessageBox.Yes | QMessageBox.No)
+        
+        if reply == QMessageBox.Yes:
+            # UpdateWorker 사용
+            if self.update_worker and self.update_worker.isRunning():
+                return
+            
+            self.refresh_btn.setEnabled(False)
+            self.update_btn.setEnabled(False)
+
+            self.update_worker = UpdateWorker(mods_to_update)
+            self.update_worker.progress.connect(self._on_progress)
+            self.update_worker.message.connect(self._on_message)
+            self.update_worker.eta.connect(self._on_eta)
+            self.update_worker.finished.connect(self._on_update_finished)
+            self.update_worker.error.connect(self._on_worker_error) # Connect error signal
+            self.update_worker.start()
+            self.show_loading(f"{len(mods_to_update)}개 모드 업데이트 중...") # Show update loading
+
+    def _on_update_finished(self):
+        if self.loading:
+            fade_out = QPropertyAnimation(self.loading, b"windowOpacity", self.loading)
+            fade_out.setStartValue(1.0)
+            fade_out.setEndValue(0.0)
+            fade_out.setDuration(300)
+            fade_out.finished.connect(self.loading.close)
+            fade_out.finished.connect(self.activateWindow)
+            fade_out.start()
+        
+        self.refresh_btn.setEnabled(True)
+        self.update_btn.setEnabled(True)
+        QMessageBox.information(self, "완료", "모드 업데이트가 완료되었습니다.")
+        self.load_mods() # 모든 업데이트 후 한 번만 새로고침
+        self.update_worker = None
