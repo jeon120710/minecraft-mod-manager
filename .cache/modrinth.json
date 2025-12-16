@@ -1,5 +1,5 @@
 {
-  "_time": 1765864742.741143,
+  "_time": 1765883324.44769,
   "mods": {
     "dynamic-fps-3.11.1+minecraft-1.21.11-neoforge.jar": {
       "mc_version": "3.11.1",
@@ -72,6 +72,18 @@
       "mod_name": "sodium-neoforge-0.8.0+mc1.21.11",
       "loader": "Forge",
       "status": "업데이트 가능"
+    },
+    "dynamic-fps-3.11.0+minecraft-1.21.9-fabric.jar": {
+      "mc_version": "1.21.9",
+      "mod_name": "Dynamic FPS",
+      "loader": "Fabric",
+      "status": "업데이트 가능"
+    },
+    "asdfasdfasdf.jar": {
+      "mc_version": "오류",
+      "mod_name": "asdfasdfasdf.jar",
+      "loader": "오류",
+      "status": "Modrinth 찾기 실패"
     }
   }
 }

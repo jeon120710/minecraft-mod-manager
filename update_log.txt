@@ -5,3 +5,5 @@
 2025-12-16 14:55:48.168498: Sodium 0.8.0+mc1.21.11 -> mc1.21.11-0.8.0-neoforge (file: sodium-fabric-0.8.0+mc1.21.11.jar -> sodium-neoforge-0.8.0+mc1.21.11.jar)
 2025-12-16 14:57:54.294426: Iris ${version} -> 1.10.2+1.21.11-neoforge (file: iris-neoforge-1.10.2+mc1.21.11.jar -> iris-neoforge-1.10.2+mc1.21.11.jar)
 2025-12-16 14:57:58.244950: sodium-neoforge-0.8.0+mc1.21.11 0.8.0 -> 3.3 (file: sodium-neoforge-0.8.0+mc1.21.11.jar -> Enhanced FPS (NeoForge) 3.3.mrpack)
+2025-12-16 15:52:48.594935: Dynamic FPS 3.11.0 -> 3.11.1 (file: dynamic-fps-3.11.0+minecraft-1.21.9-fabric.jar -> dynamic-fps-3.11.1+minecraft-1.21.11-neoforge.jar)
+2025-12-16 16:02:35.092387: Dynamic FPS 3.11.0 -> 3.11.1 (file: dynamic-fps-3.11.0+minecraft-1.21.9-fabric.jar -> dynamic-fps-3.11.1+minecraft-1.21.11-neoforge.jar)
