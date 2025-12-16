@@ -24,7 +24,11 @@ def update_mod(mod):
         project_id = hits[0]["project_id"]
         
         # 최신 버전 가져오기
-        r2 = requests.get(f"https://api.modrinth.com/v2/project/{project_id}/version", params={"loaders": [mod["loader"].lower()]})
+        params = {"loaders": [mod["loader"].lower()]}
+        if mod.get("mc_version") and mod["mc_version"] != "-":
+            params["game_versions"] = [mod["mc_version"]]
+
+        r2 = requests.get(f"https://api.modrinth.com/v2/project/{project_id}/version", params=params)
         r2.raise_for_status()
         versions = r2.json()
         if not versions:

@@ -17,7 +17,7 @@ def main():
     apply_global_style(app)
 
     window = MainWindow()
-    window.show() # 로딩 상태와 관계없이 창을 먼저 표시
+    # window.show() # 로딩 상태와 관계없이 창을 먼저 표시 / MainWindow에서 직접 show()를 호출하도록 변경
 
     sys.exit(app.exec())
 

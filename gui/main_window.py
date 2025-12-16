@@ -114,6 +114,7 @@ class MainWindow(QWidget):
         if self.loading:
             self.loading.close()
 
+        self.show()
         QMessageBox.critical(self, "오류 발생!", f"작업 중 오류가 발생했습니다: {error_message}")
         
         self.refresh_btn.setEnabled(True)
@@ -125,6 +126,7 @@ class MainWindow(QWidget):
         if self.loading:
             self.loading.close()
         
+        self.show()
         mods_path = get_mods_dir()
         self.table.hide()
         self.refresh_btn.hide()
@@ -204,8 +206,11 @@ class MainWindow(QWidget):
             fade_out.setEndValue(0.0)
             fade_out.setDuration(300)
             fade_out.finished.connect(self.loading.close)
+            fade_out.finished.connect(self.show)
             fade_out.finished.connect(self.activateWindow)
             fade_out.start()
+        else:
+            self.show()
 
         if not mods:
             self.table.hide()
