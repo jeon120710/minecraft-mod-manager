@@ -8,6 +8,10 @@ from core.mod_scanner import get_minecraft_dir
 LOG_FILE = Path("update_log.txt")
 
 def update_mod(mod):
+    mods_dir = get_minecraft_dir() / "mods"
+    old_file_path = mods_dir / mod["file"]
+    temp_file_path = None # temp_file_path를 초기화합니다.
+
     try:
         # Modrinth 프로젝트 검색
         r = requests.get("https://api.modrinth.com/v2/search", params={"query": mod["mod_name"], "limit": 1})
@@ -24,35 +28,46 @@ def update_mod(mod):
         if not versions:
             raise Exception("버전 찾기 실패")
         latest = versions[0]
+        
+        # 파일 정보 설정
         download_url = latest["files"][0]["url"]
-        
-        # 다운로드
-        mods_dir = get_minecraft_dir() / "mods"
-        old_file = mods_dir / mod["file"]
-        new_file = mods_dir / latest["files"][0]["filename"]
-        
-        # 백업
+        new_file_name = latest["files"][0]["filename"]
+        new_file_path = mods_dir / new_file_name
+        temp_file_path = new_file_path.with_suffix(new_file_path.suffix + '.tmp')
+
+        # 백업 생성
         backup_dir = get_minecraft_dir() / "mods_backup"
         backup_dir.mkdir(exist_ok=True)
-        backup_file = backup_dir / mod["file"]
-        if old_file.exists():
-            shutil.copy2(old_file, backup_file)
-        
+        if old_file_path.exists():
+            shutil.copy2(old_file_path, backup_dir / mod["file"])
+
+        # 1. 임시 파일로 다운로드
         with requests.get(download_url, stream=True) as resp:
             resp.raise_for_status()
-            with open(new_file, 'wb') as f:
+            with open(temp_file_path, 'wb') as f:
                 for chunk in resp.iter_content(chunk_size=8192):
                     f.write(chunk)
         
-        # 로그 기록
+        # 2. 다운로드 성공 후, 기존 파일 삭제 (이름이 다른 경우)
+        if old_file_path.exists() and old_file_path != new_file_path:
+            old_file_path.unlink()
+
+        # 3. 임시 파일을 최종 위치로 이동 (원자적 연산)
+        os.replace(temp_file_path, new_file_path)
+        temp_file_path = None # 이동 성공 후 None으로 설정하여 finally에서 삭제되지 않도록 함
+
+        # 4. 로그 기록
         with LOG_FILE.open('a', encoding='utf-8') as f:
-            f.write(f"{datetime.now()}: {mod['mod_name']} {mod.get('mod_version', 'unknown')} -> {latest['version_number']} (file: {old_file.name} -> {new_file.name})\n")
-        
-        # 다운로드 성공 후 기존 파일 삭제
-        if old_file.exists():
-            old_file.unlink()
+            f.write(f"{datetime.now()}: {mod['mod_name']} {mod.get('mod_version', 'unknown')} -> {latest['version_number']} (file: {old_file_path.name} -> {new_file_path.name})\n")
+
     except Exception as e:
+        # 5. 오류 발생 시 런타임 오류 발생
         raise RuntimeError(f"업데이트 오류: {e}")
+    
+    finally:
+        # 6. 어떤 경우에도 임시 파일이 남아있으면 삭제
+        if temp_file_path and temp_file_path.exists():
+            temp_file_path.unlink()
 
 
 def rollback_mod(old_file_name: str, new_file_name: str) -> bool:

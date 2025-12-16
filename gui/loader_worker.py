@@ -1,6 +1,6 @@
 from PySide6.QtCore import QThread, Signal
 import time, requests, re
-from core.mod_scanner import scan_mods
+from core.mod_scanner import scan_mods, ModsFolderNotFoundError
 from core.modrinth_cache import load_cache, save_cache
 
 class LoaderWorker(QThread):
@@ -8,11 +8,21 @@ class LoaderWorker(QThread):
     message = Signal(str)
     eta = Signal(str)
     finished = Signal(list)
-    error = Signal(str) # Add error signal
+    error = Signal(str)
+    mods_folder_not_found = Signal()
+
+    def __init__(self, mods_dir_path: str = None):
+        super().__init__()
+        self.mods_dir_path = mods_dir_path
 
     def run(self):
         start = time.time()
-        mods = scan_mods()
+        try:
+            mods = scan_mods(self.mods_dir_path)
+        except ModsFolderNotFoundError:
+            self.mods_folder_not_found.emit()
+            return
+
         total = len(mods)
 
         cached_mods = load_cache()  # 캐시 로드
@@ -82,12 +92,10 @@ class LoaderWorker(QThread):
                             if latest_mod_ver > current_mod_ver: # This string comparison is still an issue. Will address later.
                                 status = "업데이트 가능"
                                 mod["latest_mod_version"] = latest_mod_ver
-                            else:
-                                status = "Modrinth 확인됨"
-                        else:
-                            status = "Modrinth 확인됨"
+                        # 버전이 같거나, 로컬 버전을 알 수 없는 경우 상태를 덮어쓰지 않음
+                        # else: Do not overwrite status like "파일에서 추출됨"
                     else:
-                        status = "Modrinth 확인됨" # 버전은 없지만 프로젝트는 찾음
+                        status = "프로젝트는 찾았으나, 호환 파일 없음" # 버전은 없지만 프로젝트는 찾음
                 else:
                     status = "Modrinth 찾기 실패" # 프로젝트를 찾지 못함 (1차/2차 모두)
             except requests.RequestException as e:
