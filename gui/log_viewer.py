@@ -1,0 +1,131 @@
+import sys
+from PySide6.QtWidgets import (
+    QDialog, QVBoxLayout, QTextEdit, QPushButton, QApplication, QTableWidget, 
+    QTableWidgetItem, QHeaderView, QMessageBox
+)
+from PySide6.QtCore import Qt
+from pathlib import Path
+import re
+from core.update_mod import rollback_mod
+
+LOG_FILE = Path("update_log.txt")
+
+class LogViewerDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("업데이트 로그")
+        self.resize(800, 600) # 조금 더 크게
+
+        # 테이블
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["날짜", "모드 이름", "변경 사항", "파일", "작업"])
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents) # 날짜
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents) # 모드 이름
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents) # 변경 사항
+        header.setSectionResizeMode(3, QHeaderView.Stretch)       # 파일 (경로가 길 수 있으므로)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents) # 작업
+        
+        self.close_btn = QPushButton("닫기")
+        self.close_btn.setObjectName("closeButton") # QSS를 위한 Object Name
+        self.close_btn.clicked.connect(self.close)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15) # 여백 추가
+        layout.setSpacing(10) # 간격 추가
+        layout.addWidget(self.table)
+        layout.addWidget(self.close_btn, alignment=Qt.AlignRight)
+
+        self.load_logs()
+
+    def load_logs(self):
+        if not LOG_FILE.exists():
+            self.table.setRowCount(1)
+            self.table.setItem(0, 0, QTableWidgetItem("로그 파일이 없습니다."))
+            self.table.setSpan(0, 0, 1, 5)
+            return
+
+        logs = LOG_FILE.read_text(encoding="utf-8").strip().split("\n")
+        self.table.setRowCount(len(logs))
+
+        # Regex to parse the log entry
+        log_pattern = re.compile(
+            r"^(?P<timestamp>.*?): "
+            r"(?P<mod_name>.*?) "
+            r"(?P<versions>[\w\.\-]+ -> [\w\.\-]+) "
+            r"\(file: (?P<old_file>.*?) -> (?P<new_file>.*?)\)$"
+        )
+
+        for row, log_entry in enumerate(reversed(logs)): # Show newest first
+            match = log_pattern.match(log_entry)
+
+            if match:
+                data = match.groupdict()
+                self.table.setItem(row, 0, QTableWidgetItem(data["timestamp"]))
+                self.table.setItem(row, 1, QTableWidgetItem(data["mod_name"]))
+                self.table.setItem(row, 2, QTableWidgetItem(data["versions"]))
+                self.table.setItem(row, 3, QTableWidgetItem(f"{data['old_file']} -> {data['new_file']}"))
+
+                rollback_btn = QPushButton("롤백")
+                # Store the necessary info for the rollback action
+                rollback_btn.setProperty("old_file", data["old_file"])
+                rollback_btn.setProperty("new_file", data["new_file"])
+                rollback_btn.clicked.connect(self.rollback_triggered)
+                self.table.setCellWidget(row, 4, rollback_btn)
+            else:
+                # Handle non-matching log entries (e.g., rollbacks, older formats)
+                timestamp, _, message = log_entry.partition(':')
+                self.table.setItem(row, 0, QTableWidgetItem(timestamp.strip()))
+                self.table.setItem(row, 1, QTableWidgetItem(message.strip()))
+                self.table.setSpan(row, 1, 1, 3) # Span message across 3 columns
+
+        self.table.resizeColumnsToContents()
+        # Manually adjust width for the "작업" column (index 4)
+        # as resizeColumnsToContents might not account for QPushButton widgets correctly.
+        # A width of around 80-100 pixels should be enough for "롤백" button.
+        current_width_col4 = self.table.columnWidth(4)
+        if current_width_col4 < 90: # Ensure it's at least 90 pixels wide
+            self.table.setColumnWidth(4, 90)
+
+
+
+    def rollback_triggered(self):
+        button = self.sender()
+        old_file = button.property("old_file")
+        new_file = button.property("new_file")
+
+        reply = QMessageBox.question(
+            self,
+            "롤백 확인",
+            f"'{new_file}'을(를) '{old_file}'(으)로 롤백하시겠습니까?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            success = rollback_mod(old_file, new_file)
+            if success:
+                QMessageBox.information(self, "성공", "롤백이 완료되었습니다.")
+                self.load_logs() # Refresh the log view
+                self.accept() # Close the dialog and signal success
+            else:
+                QMessageBox.critical(self, "오류", "롤백에 실패했습니다. 자세한 내용은 콘솔 출력을 확인하세요.")
+
+
+
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    # This is for testing the dialog independently
+    # Create a dummy log file
+    dummy_log = """2025-12-14 14:30:05: Some Mod 1.2.3 -> 1.3.0 (file: some-mod-1.2.3.jar -> some-mod-1.3.0.jar)
+2025-12-14 14:32:10: Another Mod 2.0.0 -> 2.1.0 (file: another-mod-2.0.jar -> another-mod-2.1.0.jar)
+"""
+    LOG_FILE.write_text(dummy_log, encoding="utf-8")
+    
+    dialog = LogViewerDialog()
+    dialog.exec()
+    
+    # Clean up dummy file
+    LOG_FILE.unlink()
+    
+    sys.exit(app.exec())

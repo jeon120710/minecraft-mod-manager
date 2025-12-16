@@ -1,0 +1,77 @@
+{
+  "_time": 1765864742.741143,
+  "mods": {
+    "dynamic-fps-3.11.1+minecraft-1.21.11-neoforge.jar": {
+      "mc_version": "3.11.1",
+      "mod_name": "dynamic-fps-3.11.1+minecraft",
+      "loader": "Forge",
+      "status": "Modrinth 확인됨"
+    },
+    "entityculling-fabric-1.9.4-mc1.21.11.jar": {
+      "mc_version": "1.21",
+      "mod_name": "EntityCulling",
+      "loader": "Fabric",
+      "status": "Modrinth 확인됨"
+    },
+    "fabric-api-0.139.5+1.21.11.jar": {
+      "mc_version": "1.21.11",
+      "mod_name": "Fabric API",
+      "loader": "Fabric",
+      "status": "Modrinth 확인됨"
+    },
+    "fabric-language-kotlin-1.13.7+kotlin.2.2.21.jar": {
+      "mc_version": "-",
+      "mod_name": "Fabric Language Kotlin",
+      "loader": "Fabric",
+      "status": "Modrinth 확인됨"
+    },
+    "iris-fabric-1.10.0+mc1.21.11.jar": {
+      "mc_version": "-",
+      "mod_name": "Iris",
+      "loader": "Fabric",
+      "status": "업데이트 가능"
+    },
+    "modmenu-17.0.0-alpha.1.jar": {
+      "mc_version": "1.21.9",
+      "mod_name": "Mod Menu",
+      "loader": "Unknown",
+      "status": "Modrinth 확인됨"
+    },
+    "MouseTweaks-fabric-mc1.21.11-2.30.jar": {
+      "mc_version": "1.21.11",
+      "mod_name": "Mouse Tweaks",
+      "loader": "Fabric",
+      "status": "Modrinth 확인됨"
+    },
+    "servercore-fabric-1.5.15+1.21.11.jar": {
+      "mc_version": "1.21.11",
+      "mod_name": "ServerCore",
+      "loader": "Fabric",
+      "status": "Modrinth 확인됨"
+    },
+    "sodium-fabric-0.8.0+mc1.21.11.jar": {
+      "mc_version": "-",
+      "mod_name": "Sodium",
+      "loader": "Fabric",
+      "status": "업데이트 가능"
+    },
+    "Zoomify-2.14.6+1.21.11.jar": {
+      "mc_version": "1.21.11",
+      "mod_name": "Zoomify",
+      "loader": "Unknown",
+      "status": "Modrinth 확인됨"
+    },
+    "iris-neoforge-1.10.2+mc1.21.11.jar": {
+      "mc_version": "-",
+      "mod_name": "Iris",
+      "loader": "Forge",
+      "status": "업데이트 가능"
+    },
+    "sodium-neoforge-0.8.0+mc1.21.11.jar": {
+      "mc_version": "0.8.0",
+      "mod_name": "sodium-neoforge-0.8.0+mc1.21.11",
+      "loader": "Forge",
+      "status": "업데이트 가능"
+    }
+  }
+}
