@@ -28,7 +28,6 @@ def save_cache(mods: dict):
     try:
         # get_app_data_dir()이 디렉토리 생성을 보장하므로 mkdir은 필요 없음
         payload = {
-            "_time": time.time(),
             "mods": mods
         }
         CACHE_FILE.write_text(

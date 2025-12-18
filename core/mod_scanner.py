@@ -38,14 +38,15 @@ def scan_mods(mods_dir_path: str = None):
     mods = []
     for file in mods_dir.glob("*.jar"):
         try:
-            mod_name, mc_version, mod_version = detect_mc_version_and_name(file.name, mods_dir)
+            mod_name, mc_version, mod_version, project_id = detect_mc_version_and_name(file.name, mods_dir)
             mods.append({
                 "file": file.name,
                 "loader": detect_loader(file.name),
                 "mc_version": mc_version or "-",
                 "mod_version": mod_version or "-",
                 "mod_name": mod_name or file.stem,
-                "status": "확인 중"
+                "project_id": project_id, # 해시로 찾은 project_id 추가
+                "status": "로컬 스캔 완료"
             })
         except Exception as e:
             print(f"[경고] 모드 파일 '{file.name}'을(를) 읽는 중 오류 발생: {e}")
@@ -55,6 +56,7 @@ def scan_mods(mods_dir_path: str = None):
                 "mc_version": "오류",
                 "mod_version": "오류",
                 "mod_name": file.name,
+                "project_id": None,
                 "status": "파일 손상됨"
             })
     return mods
