@@ -163,6 +163,13 @@ def detect_mc_version_and_name(filename: str, mods_dir: Path):
         mod_version = mod_version_file
         mc_version = mc_version_file
 
+    # 4. 파일 이름에서 MC 버전 추출 (최후의 수단)
+    if not mc_version:
+        # e.g., ...-fabric-mc1.21-2.30.jar, ...+1.21.0.jar
+        match = re.search(r'(?:[+_-]mc?|fabric-|forge-)(1\.\d{2,}(?:\.\d{1,2})?)', filename, re.IGNORECASE)
+        if match:
+            mc_version = match.group(1)
+
     if not mod_name:
         mod_name = jar_path.stem.split('-')[0].replace('_', ' ').strip()
 
