@@ -248,13 +248,15 @@ class MainWindow(QWidget):
                 status_item.setTextAlignment(Qt.AlignCenter)
                 
                 if status == "업데이트 가능":
-                    status_item.setForeground(QColor("#f1c40f"))
-                elif status in ["Modrinth 확인됨", "캐시됨", "프로젝트는 찾았으나, 호환 파일 없음"]:
-                    status_item.setForeground(QColor("#2ecc71"))
-                elif status == "Modrinth 오류":
-                    status_item.setForeground(QColor("#e74c3c"))
+                    status_item.setForeground(QColor("#f1c40f"))  # 노란색
+                elif status in ["최신 버전", "Modrinth 확인됨", "캐시됨"]:
+                    status_item.setForeground(QColor("#2ecc71"))  # 녹색
+                elif status in ["프로젝트 못찾음", "호환 버전 없음"]:
+                    status_item.setForeground(QColor("#e67e22"))  # 주황색
+                elif "오류" in status:
+                    status_item.setForeground(QColor("#e74c3c"))  # 빨간색
                 else:
-                    status_item.setForeground(QColor("#95a5a6"))
+                    status_item.setForeground(QColor("#95a5a6"))  # 회색
                 
                 status_item.setToolTip(status)
                 self.table.setItem(row, 4, status_item)

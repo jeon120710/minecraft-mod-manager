@@ -41,6 +41,7 @@ class LogViewerDialog(QDialog):
         self.load_logs()
 
     def load_logs(self):
+        self.table.setRowCount(0) # 테이블 초기화
         if not LOG_FILE.exists():
             self.table.setRowCount(1)
             self.table.setItem(0, 0, QTableWidgetItem("로그 파일이 없습니다."))
@@ -53,9 +54,9 @@ class LogViewerDialog(QDialog):
         # Regex to parse the log entry
         log_pattern = re.compile(
             r"^(?P<timestamp>.*?): "
-            r"(?P<mod_name>.*?) "
-            r"(?P<versions>[\w\.\-]+ -> [\w\.\-]+) "
-            r"\(file: (?P<old_file>.*?) -> (?P<new_file>.*?)\)$"
+            r"(?P<mod_name>.*?) ?"  # Mod name (non-greedy), space is optional
+            r"(?P<versions>[\w\.\-]+\s->\s[\w\.\-]+)? ?" # Optional versions group
+            r"\(file: (?P<old_file>.*?) -> (?P<new_file>.*?)\)$" # File changes
         )
 
         for row, log_entry in enumerate(reversed(logs)): # Show newest first
@@ -63,10 +64,11 @@ class LogViewerDialog(QDialog):
 
             if match:
                 data = match.groupdict()
+                versions = data.get("versions") or "N/A" # Use N/A if versions not found
                 self.table.setItem(row, 0, QTableWidgetItem(data["timestamp"]))
                 self.table.setItem(row, 1, QTableWidgetItem(data["mod_name"]))
-                self.table.setItem(row, 2, QTableWidgetItem(data["versions"]))
-                self.table.setItem(row, 3, QTableWidgetItem(f"{data['old_file']} -> {data['new_file']}"))
+                self.table.setItem(row, 2, QTableWidgetItem(versions))
+                self.table.setItem(row, 3, QTableWidgetItem(f"{data.get('old_file', '')} -> {data.get('new_file', '')}"))
 
                 rollback_btn = QPushButton("롤백")
                 # Store the necessary info for the rollback action
@@ -76,6 +78,7 @@ class LogViewerDialog(QDialog):
                 self.table.setCellWidget(row, 4, rollback_btn)
             else:
                 # Handle non-matching log entries (e.g., rollbacks, older formats)
+                # 정규식과 일치하지 않는 로그 처리 (예: 롤백 로그, 이전 형식의 로그)
                 timestamp, _, message = log_entry.partition(':')
                 self.table.setItem(row, 0, QTableWidgetItem(timestamp.strip()))
                 self.table.setItem(row, 1, QTableWidgetItem(message.strip()))
@@ -109,6 +112,7 @@ class LogViewerDialog(QDialog):
                 QMessageBox.information(self, "성공", "롤백이 완료되었습니다.")
                 self.load_logs() # Refresh the log view
                 self.accept() # Close the dialog and signal success
+                self.load_logs() # 롤백 후 로그 목록을 새로고침하여 사용자에게 보여줌
             else:
                 QMessageBox.critical(self, "오류", "롤백에 실패했습니다. 자세한 내용은 콘솔 출력을 확인하세요.")
 
@@ -119,8 +123,10 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     # This is for testing the dialog independently
     # Create a dummy log file
+    # Create a dummy log file with various log types
     dummy_log = """2025-12-14 14:30:05: Some Mod 1.2.3 -> 1.3.0 (file: some-mod-1.2.3.jar -> some-mod-1.3.0.jar)
 2025-12-14 14:32:10: Another Mod 2.0.0 -> 2.1.0 (file: another-mod-2.0.jar -> another-mod-2.1.0.jar)
+2025-12-14 14:35:00: ROLLBACK: Rolled back 'another-mod-2.1.0.jar' to 'another-mod-2.0.jar'
 """
     LOG_FILE.write_text(dummy_log, encoding="utf-8")
     
@@ -129,5 +135,8 @@ if __name__ == '__main__':
     
     # Clean up dummy file
     LOG_FILE.unlink()
+    # Clean up dummy file if it exists
+    if LOG_FILE.exists():
+        LOG_FILE.unlink()
     
     sys.exit(app.exec())
