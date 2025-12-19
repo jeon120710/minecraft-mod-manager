@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.mc_version import detect_mc_version_and_name
+from core.mod_info_cache import load_mod_info_cache, save_mod_info_cache, load_jar_metadata_cache, save_jar_metadata_cache
 
 class ModsFolderNotFoundError(Exception):
     """모드 폴더를 찾을 수 없을 때 발생하는 예외."""
@@ -30,8 +31,15 @@ def scan_mods(mods_dir_path: str = None):
     mod_files = [f for f in os.listdir(mods_dir) if f.endswith((".jar", ".jar.disabled"))]
     installed_mods = []
 
+    # Load caches once at the beginning
+    jar_metadata_cache = load_jar_metadata_cache()
+    mod_info_cache = load_mod_info_cache()
+
     with ThreadPoolExecutor() as executor:
-        future_to_filename = {executor.submit(detect_mc_version_and_name, filename, mods_dir): filename for filename in mod_files}
+        future_to_filename = {
+            executor.submit(detect_mc_version_and_name, filename, mods_dir, jar_metadata_cache, mod_info_cache): filename 
+            for filename in mod_files
+        }
         
         for future in as_completed(future_to_filename):
             filename = future_to_filename[future]
@@ -65,6 +73,10 @@ def scan_mods(mods_dir_path: str = None):
                     "all_mc_versions": [],
                 })
     
+    # Save caches once at the end
+    save_jar_metadata_cache(jar_metadata_cache)
+    save_mod_info_cache(mod_info_cache)
+
     # Sort mods by name for consistent order
     installed_mods.sort(key=lambda x: x['mod_name'].lower())
     return installed_mods
