@@ -1,36 +1,45 @@
 from PySide6.QtWidgets import (
     QWidget, QTableWidget, QTableWidgetItem, QCheckBox, QHBoxLayout, QVBoxLayout,
     QPushButton, QLabel, QProgressBar, QApplication, QHeaderView, QMessageBox, QDialog,
-    QFileDialog
+    QFileDialog, QFrame
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, Signal, Slot
+from PySide6.QtCore import Qt, QPropertyAnimation
 from PySide6.QtGui import QColor, QFont
 from pathlib import Path
 from gui.loader_worker import LoaderWorker
 from gui.log_viewer import LogViewerDialog
 from gui.update_worker import UpdateWorker
-import sys
-
-def get_minecraft_dir() -> Path:
-    """운영체제에 맞는 마인크래프트 기본 설치 경로를 반환합니다."""
-    if sys.platform == "win32":
-        return Path.home() / "AppData/Roaming/.minecraft"
-    elif sys.platform == "darwin":
-        return Path.home() / "Library/Application Support/minecraft"
-    else:  # Linux and other Unix-like OS
-        return Path.home() / ".minecraft"
-
-def get_mods_dir() -> Path:
-    """마인크래프트 mods 폴더 경로를 반환합니다."""
-    return get_minecraft_dir() / "mods"
+from gui.version_dialog import VersionSelectionDialog
+from core.app_path import get_mods_dir
+from core.config import save_selected_version
 
 class MainWindow(QWidget):
-    def __init__(self):
+    def __init__(self, selected_mc_version: str):
         super().__init__()
         self.setWindowTitle("마인크래프트 모드 관리자")
         self.resize(900, 700)
+        self.selected_mc_version = selected_mc_version
         self.loading = None
         self.update_worker = None
+
+        # --- 상단 버전 선택 UI ---
+        self.version_info_layout = QHBoxLayout()
+        self.version_label = QLabel(f"대상 마인크래프트 버전: {self.selected_mc_version}")
+        font = self.version_label.font()
+        font.setPointSize(10)
+        self.version_label.setFont(font)
+        
+        self.change_version_btn = QPushButton("버전 변경")
+        self.change_version_btn.clicked.connect(self._change_mc_version)
+
+        self.version_info_layout.addWidget(self.version_label)
+        self.version_info_layout.addStretch()
+        self.version_info_layout.addWidget(self.change_version_btn)
+        
+        # 구분선
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
 
         # --- 중앙 정보 라벨 ---
         self.info_label = QLabel(self)
@@ -51,7 +60,7 @@ class MainWindow(QWidget):
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
 
-        # --- 버튼 ---
+        # --- 하단 버튼 ---
         self.refresh_btn = QPushButton("새로고침")
         self.refresh_btn.clicked.connect(self.load_mods)
         self.update_btn = QPushButton("업데이트")
@@ -75,6 +84,8 @@ class MainWindow(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(10)
+        layout.addLayout(self.version_info_layout)
+        layout.addWidget(line)
         layout.addWidget(self.info_label)
         layout.addWidget(self.table)
         layout.addLayout(self.btn_layout)
@@ -83,7 +94,17 @@ class MainWindow(QWidget):
         self.table.show()
 
         self.worker = None
+        self.show() # MainWindow를 먼저 표시
         self.load_mods()
+
+    def _change_mc_version(self):
+        new_version = VersionSelectionDialog.get_selected_version(self)
+        if new_version and new_version != self.selected_mc_version:
+            self.selected_mc_version = new_version
+            save_selected_version(new_version)
+            self.version_label.setText(f"대상 마인크래프트 버전: {self.selected_mc_version}")
+            # self.load_mods() # 버전 변경 시 자동 새로고침 방지
+
 
     def load_mods(self, mods_dir_path: str = None):
         if self.worker and self.worker.isRunning():
@@ -102,7 +123,7 @@ class MainWindow(QWidget):
             self.worker.quit()
             self.worker.wait()
 
-        self.worker = LoaderWorker(mods_dir_path)
+        self.worker = LoaderWorker(self.selected_mc_version, mods_dir_path)
         self.worker.progress.connect(self._on_progress)
         self.worker.message.connect(self._on_message)
         self.worker.eta.connect(self._on_eta)
@@ -278,7 +299,9 @@ class MainWindow(QWidget):
                     status_item.setForeground(QColor("#2ecc71"))  # 녹색
                 elif status in ["프로젝트 못찾음", "호환 버전 없음"]:
                     status_item.setForeground(QColor("#e67e22"))  # 주황색
-                elif "오류" in status:
+                elif "버전 높음" in status:
+                    status_item.setForeground(QColor("#3498db"))  # 파란색
+                elif "오류" in status or "실패" in status:
                     status_item.setForeground(QColor("#e74c3c"))  # 빨간색
                 else:
                     status_item.setForeground(QColor("#95a5a6"))  # 회색

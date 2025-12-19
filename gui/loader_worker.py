@@ -12,8 +12,9 @@ class LoaderWorker(QThread):
     error = Signal(str)
     mods_folder_not_found = Signal()
 
-    def __init__(self, mods_dir_path: str = None):
+    def __init__(self, target_mc_version: str, mods_dir_path: str = None):
         super().__init__()
+        self.target_mc_version = target_mc_version
         self.mods_dir_path = mods_dir_path
 
     def run(self):
@@ -48,7 +49,7 @@ class LoaderWorker(QThread):
         
         updated_mods = []
         for i, mod in enumerate(mods):
-            mod_key = f'{mod["mod_name"]}-{mod["mod_version"]}'
+            mod_key = f'{mod["mod_name"]}-{mod["mod_version"]}-{self.target_mc_version}'
             cached_mod = cache.get(mod_key)
             
             # ETA 계산
@@ -70,7 +71,7 @@ class LoaderWorker(QThread):
             else:
                 # 캐시가 없거나 만료되었으면 API 호출
                 try:
-                    status = check_mod_for_update(mod)
+                    status = check_mod_for_update(mod, self.target_mc_version)
                     mod["status"] = status
                     # 캐시 저장을 위해 현재 시간 기록
                     mod['_timestamp'] = time.time()

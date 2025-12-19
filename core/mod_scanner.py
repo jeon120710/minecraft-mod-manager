@@ -18,7 +18,7 @@ def get_minecraft_dir() -> Path:
         return Path.home() / ".minecraft"
 
 def scan_mods(mods_dir_path: str = None):
-    """지정된 경로 또는 기본 경로에서 모드를 스캔합니다."""
+    """지정된 경로 또는 기본 경로에서 활성화/비활성화된 모드를 모두 스캔합니다."""
     if mods_dir_path:
         mods_dir = Path(mods_dir_path)
     else:
@@ -27,20 +27,22 @@ def scan_mods(mods_dir_path: str = None):
     if not mods_dir.exists():
         raise ModsFolderNotFoundError(f"모드 폴더를 찾을 수 없습니다: {mods_dir}")
     
-    jar_files = [f for f in os.listdir(mods_dir) if f.endswith(".jar")]
+    mod_files = [f for f in os.listdir(mods_dir) if f.endswith((".jar", ".jar.disabled"))]
     installed_mods = []
 
     with ThreadPoolExecutor() as executor:
-        future_to_filename = {executor.submit(detect_mc_version_and_name, filename, mods_dir): filename for filename in jar_files}
+        future_to_filename = {executor.submit(detect_mc_version_and_name, filename, mods_dir): filename for filename in mod_files}
         
         for future in as_completed(future_to_filename):
             filename = future_to_filename[future]
+            is_enabled = not filename.endswith(".jar.disabled")
             try:
                 (mod_name, mc_version, mod_version, project_id, 
                  loaders, detection_source, all_mc_versions) = future.result()
                 
                 installed_mods.append({
                     "file": filename,
+                    "enabled": is_enabled,
                     "mod_name": mod_name or Path(filename).stem,
                     "mc_version": mc_version or "-",
                     "mod_version": mod_version or "-",
@@ -53,7 +55,8 @@ def scan_mods(mods_dir_path: str = None):
                 # Add a placeholder for failed scans
                 installed_mods.append({
                     "file": filename, 
-                    "mod_name": Path(filename).stem, 
+                    "enabled": is_enabled,
+                    "mod_name": Path(filename).stem.replace(".jar", ""),
                     "mc_version": "오류", 
                     "mod_version": "오류", 
                     "project_id": None, 
