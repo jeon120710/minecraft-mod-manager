@@ -1,176 +1,230 @@
+# -*- coding: utf-8 -*-
 import zipfile
 import json
-import re
-from pathlib import Path
-import toml
-import hashlib
 import requests
-import os
-from core.modrinth_cache import load_cache, save_cache, CACHE_TTL
-import time
-from packaging.version import parse as parse_version
+import difflib
+import re
+import toml
+from pathlib import Path
 
-MODRINTH_API_URL = "https://api.modrinth.com/v2"
+MODRINTH = "https://api.modrinth.com/v2"
 
-def _get_file_hash(file_path: Path) -> str:
-    """주어진 파일의 SHA512 해시를 계산합니다."""
-    hasher = hashlib.sha512()
-    with open(file_path, "rb") as f:
-        while True:
-            chunk = f.read(8192)
-            if not chunk:
-                break
-            hasher.update(chunk)
-    return hasher.hexdigest()
+# -----------------------------
+# 1. jar에서 정보 추출
+# -----------------------------
 
-def _get_latest_mc_version(versions: list[str]) -> str | None:
-    """
-    주어진 버전 목록에서 가장 최신 버전을 찾아 반환합니다.
-    """
-    if not versions:
-        return None
-
-    release_pattern = re.compile(r"^\d+\.\d+")
-    snapshot_pattern = re.compile(r"^\d{2}w\d{2}")
-
-    release_versions = [v for v in versions if v and release_pattern.match(v)]
-    snapshot_versions = [v for v in versions if v and snapshot_pattern.match(v)]
-
-    if release_versions:
-        try:
-            release_versions.sort(key=parse_version, reverse=True)
-            return release_versions[0]
-        except Exception:
-            return release_versions[0]
+def extract_fabric_info(jar):
+    """fabric.mod.json에서 모드 정보를 추출합니다."""
+    data = json.loads(jar.read("fabric.mod.json").decode("utf-8"))
     
-    if snapshot_versions:
-        snapshot_versions.sort(reverse=True)
-        return snapshot_versions[0]
-
-    fallback_versions = [v for v in versions if v and not v[0].isalpha()]
-    if fallback_versions:
-        try:
-            fallback_versions.sort(key=parse_version, reverse=True)
-            return fallback_versions[0]
-        except Exception:
-            return fallback_versions[0]
-
-    return None
-
-def _get_mod_info_from_modrinth(file_hash: str) -> dict | None:
-    """
-    Modrinth API에서 파일 해시를 사용하여 모드 정보를 가져옵니다.
-    정확한 API 호출 순서를 따릅니다: version_file -> version -> project
-    """
-    cache = load_cache()
-    if file_hash in cache and time.time() - cache[file_hash].get("_time", 0) < CACHE_TTL:
-        return cache[file_hash].get("mod_info")
-
-    try:
-        # 1. 해시로 version_id 찾기
-        hash_res = requests.get(f"{MODRINTH_API_URL}/version_file/{file_hash}", params={'algorithm': 'sha512'}, timeout=5)
-        if hash_res.status_code == 404:
-            return None # Modrinth에 없는 모드
-        hash_res.raise_for_status()
-        version_file_data = hash_res.json()
-        version_id = version_file_data.get("version_id")
-        if not version_id:
-            return None
-
-        # 2. version_id로 상세 버전 정보 가져오기
-        version_res = requests.get(f"{MODRINTH_API_URL}/version/{version_id}", timeout=5)
-        version_res.raise_for_status()
-        version_data = version_res.json()
-
-        project_id = version_data.get("project_id")
-        game_versions = version_data.get("game_versions")
-        mod_version_num = version_data.get("version_number")
-        
-        # 3. project_id로 프로젝트 이름(mod_name) 가져오기
-        mod_name = None
-        if project_id:
-            project_res = requests.get(f"{MODRINTH_API_URL}/project/{project_id}", timeout=5)
-            project_res.raise_for_status()
-            mod_name = project_res.json().get("title")
-
-        mod_info = {
-            "project_id": project_id,
-            "mod_name": mod_name,
-            "mod_version": mod_version_num,
-            "mc_version": _get_latest_mc_version(game_versions),
-        }
-        
-        cache[file_hash] = {"_time": time.time(), "mod_info": mod_info}
-        save_cache(cache)
-        
-        return mod_info
-
-    except requests.exceptions.RequestException as e:
-        print(f"[경고] Modrinth API 요청 실패 (해시: {file_hash}): {e}")
-        return None
-    except (json.JSONDecodeError, KeyError) as e:
-        print(f"[경고] Modrinth API 응답 처리 실패 (해시: {file_hash}): {e}")
-        return None
-
-def detect_mc_version_and_name(filename: str, mods_dir: Path):
-    jar_path = mods_dir / filename
-    mod_name, mc_version, mod_version, project_id = None, None, None, None
-    mod_version_file, mc_version_file = None, None
-
-    # 1. 파일에서 메타데이터 추출 (폴백용)
-    try:
-        with zipfile.ZipFile(jar_path, "r") as z:
-            if "fabric.mod.json" in z.namelist():
-                data = json.loads(z.read("fabric.mod.json").decode("utf-8"))
-                mod_name = data.get("name") or data.get("id")
-                mod_version_file = data.get("version")
-                if "minecraft" in data.get("depends", {}):
-                    mc_dep = data["depends"]["minecraft"]
-                    match = re.search(r"(\d+\.\d+(?:\.\d+)?)", mc_dep)
-                    if match: mc_version_file = match.group(1)
-            elif "META-INF/mods.toml" in z.namelist():
-                data = toml.loads(z.read("META-INF/mods.toml").decode("utf-8"))
-                if data.get("mods"):
-                    mod_data = data["mods"][0]
-                    mod_name = mod_data.get("displayName") or mod_data.get("modId")
-                    mod_version_file = mod_data.get("version")
-                    deps = data.get("dependencies", {}).get(mod_data["modId"], [])
-                    for dep in deps:
-                        if dep.get("modId") == "minecraft":
-                            ver_range = dep.get("versionRange", "").split(",")[0].strip("[]()")
-                            match = re.search(r"(\d+\.\d+(?:\.\d+)?)", ver_range)
-                            if match: mc_version_file = match.group(1)
-                            break
-    except Exception as e:
-        print(f"JAR 파일 메타데이터 처리 오류 {filename}: {e}")
-
-    # 2. Modrinth에서 정보 조회 시도
-    modrinth_data = None
-    try:
-        file_hash = _get_file_hash(jar_path)
-        modrinth_data = _get_mod_info_from_modrinth(file_hash)
-    except Exception as e:
-        print(f"Modrinth 조회 중 오류 발생 {filename}: {e}")
-    
-    # 3. 정보 취합 (Modrinth 우선)
-    if modrinth_data:
-        project_id = modrinth_data.get("project_id")
-        mod_name = modrinth_data.get("mod_name") or mod_name
-        mod_version = modrinth_data.get("mod_version") or mod_version_file
-        mc_version = modrinth_data.get("mc_version") or mc_version_file
-    else:
-        # Modrinth 조회 실패 시 파일 데이터 사용
-        mod_version = mod_version_file
-        mc_version = mc_version_file
-
-    # 4. 파일 이름에서 MC 버전 추출 (최후의 수단)
-    if not mc_version:
-        # e.g., ...-fabric-mc1.21-2.30.jar, ...+1.21.0.jar
-        match = re.search(r'(?:[+_-]mc?|fabric-|forge-)(1\.\d{2,}(?:\.\d{1,2})?)', filename, re.IGNORECASE)
+    mc_version = None
+    if "minecraft" in data.get("depends", {}):
+        mc_dep = str(data["depends"]["minecraft"])
+        match = re.search(r"(\d+\.\d+(?:\.\d+)?)", mc_dep)
         if match:
             mc_version = match.group(1)
 
-    if not mod_name:
-        mod_name = jar_path.stem.split('-')[0].replace('_', ' ').strip()
+    return {
+        "name": data.get("name"),
+        "modid": data.get("id"),
+        "version": data.get("version"),
+        "mc_version": mc_version,
+        "loaders": ["fabric"],
+    }
 
-    return mod_name, mc_version, mod_version, project_id
+def extract_forge_info(jar):
+    """
+    1. TOML 라이브러리로 파싱 (최상위, [[mods]] 내부 모두 확인)
+    2. 실패 시 정규표현식으로 폴백
+    """
+    name = None
+    modid = None
+    loader = "forge"
+    
+    try:
+        text = jar.read("META-INF/mods.toml").decode(errors="ignore")
+
+        # 1. TOML 라이브러리로 분석 시도
+        try:
+            data = toml.loads(text)
+            if "neoforge" in text.lower():
+                loader = "neoforge"
+
+            # 최상위 레벨에서 먼저 찾아보기
+            if not modid:
+                modid = data.get("modId")
+            if not name:
+                name = data.get("displayName")
+
+            # [[mods]] 테이블 내부에서 찾아보기
+            if not modid and "mods" in data and isinstance(data.get("mods"), list):
+                for mod_table in data["mods"]:
+                    if mod_table.get("modId"):
+                        modid = mod_table.get("modId")
+                        name = mod_table.get("displayName", name) # 이름이 있으면 갱신
+                        break
+            
+        except Exception:
+            pass # TOML 분석 실패 시, 아래의 정규표현식으로 넘어감
+
+        # 2. 정규표현식으로 폴백
+        if not modid:
+            match = re.search(r'modId\s*=\s*"([^"]+)"', text)
+            if match:
+                modid = match.group(1)
+    
+        if not name:
+            match = re.search(r'displayName\s*=\s*"([^"]+)"', text)
+            if match:
+                name = match.group(1)
+
+    except Exception:
+        # jar 파일에서 mods.toml을 읽는 것 자체를 실패한 경우
+        return { "name": None, "modid": None, "loaders": ["forge"] }
+
+    return {"name": name, "modid": modid, "loaders": [loader]}
+
+
+def extract_mod_info(jar_path):
+    """jar 파일에서 메타데이터를 추출합니다."""
+    try:
+        with zipfile.ZipFile(jar_path) as jar:
+            if "fabric.mod.json" in jar.namelist():
+                return extract_fabric_info(jar)
+            if "META-INF/mods.toml" in jar.namelist():
+                return extract_forge_info(jar)
+    except (zipfile.BadZipFile, json.JSONDecodeError, toml.TomlDecodeError):
+        return {} # 손상된 파일이거나 분석할 수 없는 경우
+    return {}
+
+# -----------------------------
+# 2. Modrinth 검색 공통
+# -----------------------------
+
+def modrinth_search(query):
+    """Modrinth에서 이름/ID로 검색합니다."""
+    if not query: return []
+    try:
+        r = requests.get(f"{MODRINTH}/search", params={"query": query, "limit": 10}, timeout=10)
+        r.raise_for_status()
+        return r.json().get("hits", [])
+    except requests.exceptions.RequestException:
+        return []
+
+def pick_best_match(query, hits):
+    """검색 결과에서 가장 유사도가 높은 항목을 선택합니다."""
+    best = None
+    score = 0.0
+    for h in hits:
+        s1 = difflib.SequenceMatcher(None, query.lower(), h["title"].lower()).ratio()
+        s2 = difflib.SequenceMatcher(None, query.lower(), h["slug"].lower()).ratio()
+        s = max(s1, s2)
+        if s > score:
+            score = s
+            best = h
+    return best if score >= 0.7 else None
+
+# -----------------------------
+# 3. project_id → 버전 정보
+# -----------------------------
+
+def get_versions(project_id):
+    """프로젝트의 모든 버전 정보를 가져옵니다."""
+    try:
+        r = requests.get(f"{MODRINTH}/project/{project_id}/version", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.RequestException:
+        return []
+
+def extract_loaders_mc_from_versions(versions):
+    """버전 정보 목록에서 모든 로더와 MC 버전을 추출합니다."""
+    loaders = set()
+    mc_versions = set()
+    for v in versions:
+        loaders.update(v.get("loaders", []))
+        mc_versions.update(v.get("game_versions", []))
+    return sorted(list(loaders)), sorted(list(mc_versions))
+
+# -----------------------------
+# 4. 전체 파이프라인
+# -----------------------------
+
+def analyze_mod(jar_path):
+    """jar 파일을 분석하여 Modrinth 프로젝트 정보와 모든 버전 목록을 반환합니다."""
+    info = extract_mod_info(jar_path)
+    name = info.get("name")
+    modid = info.get("modid")
+    project = None
+
+    if name:
+        hits = modrinth_search(name)
+        project = pick_best_match(name, hits)
+    if not project and modid:
+        hits = modrinth_search(modid)
+        project = pick_best_match(modid, hits)
+
+    if not project:
+        return {
+            "status": "FAILED",
+            "mod_name": name or modid or Path(jar_path).stem,
+            "mod_version": info.get("version"),
+            "mc_version": info.get("mc_version"),
+            "all_mc_versions": [],
+            "loaders": info.get("loaders"),
+            "project_id": None,
+            "detection_source": "File Only",
+        }
+
+    versions = get_versions(project["project_id"])
+    all_loaders, all_mc_versions = extract_loaders_mc_from_versions(versions)
+
+    # 파일에서 추출한 로더를 우선으로 하되, 없으면 Modrinth 정보 사용
+    final_loaders = info.get("loaders") or all_loaders
+
+    return {
+        "status": "OK",
+        "project_id": project["project_id"],
+        "mod_name": project.get("title"),
+        "mod_version": info.get("version"),
+        "mc_version": info.get("mc_version"), # 파일에서 추출한 특정 MC 버전
+        "all_mc_versions": all_mc_versions, # Modrinth의 모든 MC 버전
+        "loaders": final_loaders,
+        "detection_source": "Modrinth Search",
+    }
+
+# -----------------------------
+# 5. 기존 코드와의 호환성을 위한 어댑터
+# -----------------------------
+
+def detect_mc_version_and_name(filename: str, mods_dir: Path):
+    """`mod_scanner.py`에서 호출하는 함수. 결과를 기존 포맷에 맞춰 반환합니다."""
+    jar_path = mods_dir / filename
+    try:
+        result = analyze_mod(jar_path)
+
+        mod_name = result["mod_name"]
+        mc_version = result["mc_version"]
+        mod_version = result["mod_version"]
+        project_id = result["project_id"]
+        loaders = result["loaders"] or []
+        detection_source = result["detection_source"]
+        all_mc_versions = result["all_mc_versions"]
+
+        # 파일 이름에서 MC 버전, 로더 정보 추출 (최후의 보루)
+        if not mc_version:
+            match = re.search(r'(?:[+_-]mc?|fabric-|forge-|-)(1\.\d{2,}(?:\.\d{1,2})?)', filename, re.IGNORECASE)
+            if match: mc_version = match.group(1)
+        if not loaders:
+            fn_lower = filename.lower()
+            if "fabric" in fn_lower: loaders.append("fabric")
+            if "neoforge" in fn_lower: loaders.append("neoforge")
+            if "forge" in fn_lower and "neoforge" not in fn_lower: loaders.append("forge")
+            if "quilt" in fn_lower: loaders.append("quilt")
+
+        return (mod_name, mc_version, mod_version, project_id, 
+                list(set(loaders)), detection_source, all_mc_versions)
+    
+    except Exception as e:
+        # 최종 예외 처리
+        return Path(filename).stem, "오류", "오류", None, [], "Error", []

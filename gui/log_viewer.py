@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from pathlib import Path
-import re
+import re, os, shutil
 from core.update_mod import rollback_mod
 from core.app_path import get_app_data_dir
 
@@ -53,10 +53,10 @@ class LogViewerDialog(QDialog):
 
         # Regex to parse the log entry
         log_pattern = re.compile(
-            r"^(?P<timestamp>.*?): "
+            r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}): "
             r"(?P<mod_name>.*?) ?"  # Mod name (non-greedy), space is optional
             r"(?P<versions>[\w\.\-]+\s->\s[\w\.\-]+)? ?" # Optional versions group
-            r"\(file: (?P<old_file>.*?) -> (?P<new_file>.*?)\)$" # File changes
+            r"\(file: (?P<old_file>.*?) -> (?P<new_file>.*?)\)\s*$" # File changes, with optional trailing space
         )
 
         for row, log_entry in enumerate(reversed(logs)): # Show newest first
@@ -107,15 +107,14 @@ class LogViewerDialog(QDialog):
         )
 
         if reply == QMessageBox.Yes:
-            success = rollback_mod(old_file, new_file)
-            if success:
-                QMessageBox.information(self, "성공", "롤백이 완료되었습니다.")
+            try:
+                rollback_mod(old_file, new_file) # Call the re-added function
+                QMessageBox.information(self, "성공", "롤백이 완료되었습니다.\n모드 목록을 새로고침하여 변경사항을 확인하세요.")
                 self.load_logs() # Refresh the log view
-                self.accept() # Close the dialog and signal success
-                self.load_logs() # 롤백 후 로그 목록을 새로고침하여 사용자에게 보여줌
-            else:
-                QMessageBox.critical(self, "오류", "롤백에 실패했습니다. 자세한 내용은 콘솔 출력을 확인하세요.")
-
+                self.accept() # Close the dialog
+            except Exception as e:
+                QMessageBox.critical(self, "오류", f"롤백에 실패했습니다:\n{e}")
+                print(f"롤백 오류: {e}")
 
 
 

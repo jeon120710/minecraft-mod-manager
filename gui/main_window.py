@@ -9,13 +9,25 @@ from pathlib import Path
 from gui.loader_worker import LoaderWorker
 from gui.log_viewer import LogViewerDialog
 from gui.update_worker import UpdateWorker
-from core.mod_scanner import get_mods_dir
 import sys
+
+def get_minecraft_dir() -> Path:
+    """운영체제에 맞는 마인크래프트 기본 설치 경로를 반환합니다."""
+    if sys.platform == "win32":
+        return Path.home() / "AppData/Roaming/.minecraft"
+    elif sys.platform == "darwin":
+        return Path.home() / "Library/Application Support/minecraft"
+    else:  # Linux and other Unix-like OS
+        return Path.home() / ".minecraft"
+
+def get_mods_dir() -> Path:
+    """마인크래프트 mods 폴더 경로를 반환합니다."""
+    return get_minecraft_dir() / "mods"
 
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Minecraft Mod Manager")
+        self.setWindowTitle("마인크래프트 모드 관리자")
         self.resize(900, 700)
         self.loading = None
         self.update_worker = None
@@ -237,9 +249,22 @@ class MainWindow(QWidget):
                 self.table.setCellWidget(row, 0, box_widget)
 
                 self.table.setItem(row, 1, QTableWidgetItem(mod.get("file", "")))
-                self.table.setItem(row, 2, QTableWidgetItem(mod.get("loader", "")))
-                self.table.setItem(row, 3, QTableWidgetItem(mod.get("mc_version", "")))
                 
+                # 로더 정보 설정
+                loaders = mod.get("loaders", [])
+                self.table.setItem(row, 2, QTableWidgetItem(", ".join(loaders)))
+
+                # MC 버전 & 툴팁 설정
+                mc_version_str = mod.get("mc_version", "-")
+                mc_version_item = QTableWidgetItem(mc_version_str)
+                
+                all_mc_versions = mod.get("all_mc_versions", [])
+                if all_mc_versions:
+                    tooltip_text = "이 프로젝트가 지원하는 모든 버전:\n\n" + ", ".join(all_mc_versions)
+                    mc_version_item.setToolTip(tooltip_text)
+                self.table.setItem(row, 3, mc_version_item)
+                
+                # 파일, 로더, MC 버전 셀은 선택만 가능하도록 설정
                 for col in range(1, 4):
                     self.table.item(row, col).setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
 

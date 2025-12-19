@@ -1,13 +1,14 @@
+import os
 import sys
 from pathlib import Path
-from core.loader_detect import detect_loader
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.mc_version import detect_mc_version_and_name
 
 class ModsFolderNotFoundError(Exception):
     """모드 폴더를 찾을 수 없을 때 발생하는 예외."""
     pass
 
-def get_minecraft_dir():
+def get_minecraft_dir() -> Path:
     """운영체제에 맞는 마인크래프트 기본 설치 경로를 반환합니다."""
     if sys.platform == "win32":
         return Path.home() / "AppData/Roaming/.minecraft"
@@ -16,47 +17,51 @@ def get_minecraft_dir():
     else:  # Linux and other Unix-like OS
         return Path.home() / ".minecraft"
 
-def get_mods_dir():
-    """마인크래프트 mods 폴더 경로를 반환합니다."""
-    minecraft_dir = get_minecraft_dir()
-    return minecraft_dir / "mods"
-
 def scan_mods(mods_dir_path: str = None):
-    """
-    지정된 경로 또는 기본 경로에서 모드를 스캔합니다.
-    
-    :param mods_dir_path: 스캔할 모드 폴더의 경로. None이면 기본 경로를 사용합니다.
-    """
+    """지정된 경로 또는 기본 경로에서 모드를 스캔합니다."""
     if mods_dir_path:
         mods_dir = Path(mods_dir_path)
     else:
-        mods_dir = get_mods_dir()
+        mods_dir = get_minecraft_dir() / "mods"
     
     if not mods_dir.exists():
         raise ModsFolderNotFoundError(f"모드 폴더를 찾을 수 없습니다: {mods_dir}")
+    
+    jar_files = [f for f in os.listdir(mods_dir) if f.endswith(".jar")]
+    installed_mods = []
 
-    mods = []
-    for file in mods_dir.glob("*.jar"):
-        try:
-            mod_name, mc_version, mod_version, project_id = detect_mc_version_and_name(file.name, mods_dir)
-            mods.append({
-                "file": file.name,
-                "loader": detect_loader(file.name),
-                "mc_version": mc_version or "-",
-                "mod_version": mod_version or "-",
-                "mod_name": mod_name or file.stem,
-                "project_id": project_id, # 해시로 찾은 project_id 추가
-                "status": "로컬 스캔 완료"
-            })
-        except Exception as e:
-            print(f"[경고] 모드 파일 '{file.name}'을(를) 읽는 중 오류 발생: {e}")
-            mods.append({
-                "file": file.name,
-                "loader": "오류",
-                "mc_version": "오류",
-                "mod_version": "오류",
-                "mod_name": file.name,
-                "project_id": None,
-                "status": "파일 손상됨"
-            })
-    return mods
+    with ThreadPoolExecutor() as executor:
+        future_to_filename = {executor.submit(detect_mc_version_and_name, filename, mods_dir): filename for filename in jar_files}
+        
+        for future in as_completed(future_to_filename):
+            filename = future_to_filename[future]
+            try:
+                (mod_name, mc_version, mod_version, project_id, 
+                 loaders, detection_source, all_mc_versions) = future.result()
+                
+                installed_mods.append({
+                    "file": filename,
+                    "mod_name": mod_name or Path(filename).stem,
+                    "mc_version": mc_version or "-",
+                    "mod_version": mod_version or "-",
+                    "project_id": project_id,
+                    "loaders": loaders,
+                    "detection_source": detection_source,
+                    "all_mc_versions": all_mc_versions,
+                })
+            except Exception as e:
+                # Add a placeholder for failed scans
+                installed_mods.append({
+                    "file": filename, 
+                    "mod_name": Path(filename).stem, 
+                    "mc_version": "오류", 
+                    "mod_version": "오류", 
+                    "project_id": None, 
+                    "loaders": [],
+                    "detection_source": "스캔 오류",
+                    "all_mc_versions": [],
+                })
+    
+    # Sort mods by name for consistent order
+    installed_mods.sort(key=lambda x: x['mod_name'].lower())
+    return installed_mods
