@@ -120,6 +120,73 @@ def check_mod_for_update(mod: dict, target_mc_version: str) -> str:
         return "API 응답 오류"
 
 
+def get_compatible_version_details(project_id: str, loaders: list, target_mc_version: str) -> dict:
+    """
+    Modrinth API를 사용하여 주어진 Minecraft 버전에 호환되는 모드의 최신 버전 상세 정보를 가져옵니다.
+
+    :param project_id: Modrinth 프로젝트 ID.
+    :param loaders: 모드가 지원하는 로더 목록 (예: ["fabric"]).
+    :param target_mc_version: 대상 마인크래프트 버전 (예: "1.20.1").
+    :return: 최신 호환 버전의 상세 정보 (version_number, filename, download_url) 딕셔너리,
+             없으면 빈 딕셔너리를 반환합니다.
+    """
+    if not project_id or not loaders or not target_mc_version:
+        return {}
+
+    search_loaders = list(loaders)
+    if "quilt" in search_loaders and "fabric" not in search_loaders:
+        search_loaders.append("fabric")
+
+    major_mc_version = ".".join(target_mc_version.split(".")[:2])
+    game_versions_to_check = list(dict.fromkeys([target_mc_version, major_mc_version])) # Prioritize exact match
+
+    try:
+        versions_data = []
+        for gv in game_versions_to_check:
+            params = {
+                "loaders": json.dumps(search_loaders),
+                "game_versions": json.dumps([gv]),
+                "featured": "true" # Prioritize featured versions
+            }
+            res = requests.get(f"{MODRINTH_API_URL}/project/{project_id}/version", params=params, timeout=15)
+            if res.status_code == 404: continue
+            res.raise_for_status()
+            
+            current_gv_versions = res.json()
+            if current_gv_versions:
+                versions_data.extend(current_gv_versions)
+            
+        if not versions_data:
+            return {}
+
+        best_version_found = None
+        for gv_search in [target_mc_version, major_mc_version]:
+            for version_entry in versions_data:
+                if gv_search in version_entry['game_versions'] and any(loader in search_loaders for loader in version_entry['loaders']):
+                    best_version_found = version_entry
+                    break # Found the latest compatible for this game_version_search
+            if best_version_found:
+                break # Found the best overall
+
+        if not best_version_found:
+            return {}
+
+        latest_file = next((f for f in best_version_found['files'] if f['primary']), best_version_found['files'][0])
+        
+        return {
+            "version_number": best_version_found['version_number'],
+            "filename": latest_file['filename'],
+            "download_url": latest_file['url']
+        }
+
+    except requests.exceptions.RequestException as e:
+        print(f"Modrinth API 요청 실패: {e}")
+        return {}
+    except (json.JSONDecodeError, IndexError, KeyError) as e:
+        print(f"Modrinth API 응답 처리 오류: {e}")
+        return {}
+
+
 def _fetch_versions_from_modrinth(project_id: str, loaders: list, game_versions: list, featured: bool) -> list:
     """Helper function to fetch versions from Modrinth."""
     try:

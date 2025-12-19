@@ -1,14 +1,16 @@
 from PySide6.QtWidgets import (
     QWidget, QTableWidget, QTableWidgetItem, QCheckBox, QHBoxLayout, QVBoxLayout,
     QPushButton, QLabel, QProgressBar, QApplication, QHeaderView, QMessageBox, QDialog,
-    QFileDialog, QFrame
+    QFileDialog, QFrame, QMenu
 )
 from PySide6.QtCore import Qt, QPropertyAnimation
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QAction
 from pathlib import Path
+import os
 from gui.loader_worker import LoaderWorker
 from gui.log_viewer import LogViewerDialog
 from gui.update_worker import UpdateWorker
+from gui.optimize_worker import OptimizeWorker
 from gui.version_dialog import VersionSelectionDialog
 from core.app_path import get_mods_dir
 from core.config import save_selected_version
@@ -21,6 +23,7 @@ class MainWindow(QWidget):
         self.selected_mc_version = selected_mc_version
         self.loading = None
         self.update_worker = None
+        self.optimize_worker = None
 
         # --- 상단 버전 선택 UI ---
         self.version_info_layout = QHBoxLayout()
@@ -53,6 +56,8 @@ class MainWindow(QWidget):
         # --- 테이블 ---
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["선택", "파일", "로더", "MC 버전", "상태"])
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self.show_table_context_menu)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.Stretch)
@@ -76,6 +81,9 @@ class MainWindow(QWidget):
         self.btn_layout.setContentsMargins(0, 10, 0, 0)
         self.btn_layout.addWidget(self.refresh_btn)
         self.btn_layout.addWidget(self.update_btn)
+        self.optimize_btn = QPushButton("버전 최적화")
+        self.optimize_btn.clicked.connect(self._optimize_selected_mods)
+        self.btn_layout.addWidget(self.optimize_btn)
         self.btn_layout.addWidget(self.select_folder_btn)
         self.btn_layout.addStretch()
         self.btn_layout.addWidget(self.log_btn)
@@ -103,7 +111,110 @@ class MainWindow(QWidget):
             self.selected_mc_version = new_version
             save_selected_version(new_version)
             self.version_label.setText(f"대상 마인크래프트 버전: {self.selected_mc_version}")
-            # self.load_mods() # 버전 변경 시 자동 새로고침 방지
+            self.load_mods() # 버전 변경 시 자동 새로고침
+    
+    def show_table_context_menu(self, pos):
+        row = self.table.rowAt(pos.y())
+        if row < 0:
+            return
+
+        mod = self.mods[row]
+        is_enabled = mod.get("enabled", True)
+        
+        menu = QMenu()
+        toggle_action = QAction("모드 비활성화" if is_enabled else "모드 활성화", self)
+        toggle_action.triggered.connect(lambda: self._toggle_mod_state(row))
+        menu.addAction(toggle_action)
+        
+        menu.exec(self.table.mapToGlobal(pos))
+
+    def _toggle_mod_state(self, row):
+        mod = self.mods[row]
+        is_currently_enabled = mod["enabled"]
+
+        mods_dir = get_mods_dir()
+        current_path = mods_dir / mod["file"]
+
+        if is_currently_enabled:
+            # Disable: .jar -> .jar.disabled
+            new_path = current_path.with_suffix(".jar.disabled")
+        else:
+            # Enable: .jar.disabled -> .jar
+            new_path = current_path.with_suffix('')
+        
+        new_filename = new_path.name
+
+        try:
+            os.rename(current_path, new_path)
+            # Update model data first
+            mod["enabled"] = not is_currently_enabled
+            mod["file"] = new_filename
+            # Then update the view
+            self._update_row_display(row)
+        except OSError as e:
+            QMessageBox.critical(self, "오류", f"파일 이름 변경 실패: {e}")
+
+    def _update_row_display(self, row):
+        mod = self.mods[row]
+        is_enabled = mod.get("enabled", True)
+
+        # Update checkbox state
+        checkbox_widget = self.table.cellWidget(row, 0)
+        if checkbox_widget:
+            checkbox = checkbox_widget.layout().itemAt(0).widget()
+            checkbox.setEnabled(is_enabled)
+            if not is_enabled:
+                checkbox.setChecked(False)
+
+        # Update file name text
+        file_item = self.table.item(row, 1)
+        if file_item:
+            file_item.setText(mod.get("file", ""))
+
+        # --- Update Status and Colors ---
+        status = mod.get("status", "")
+        
+        # Determine text and color for the status column
+        if not is_enabled:
+            status_text = "비활성화됨"
+            display_color = QColor("#808080")  # Gray for disabled
+            tooltip = f"원래 상태: {status}"
+        else:
+            status_text = status
+            tooltip = status
+            # Determine status-specific color
+            if status == "업데이트 가능": display_color = QColor("#f1c40f")
+            elif status in ["최신 버전", "Modrinth 확인됨", "캐시됨"]: display_color = QColor("#2ecc71")
+            elif "버전 높음" in status: display_color = QColor("#3498db")
+            elif status in ["프로젝트 못찾음", "호환 버전 없음", "API 요청 실패", "API 응답 오류"]: display_color = QColor("#e67e22")
+            elif "오류" in status or "실패" in status: display_color = QColor("#e74c3c")
+            else: display_color = QColor("#95a5a6")
+
+        # Update status item
+        status_item = self.table.item(row, 4)
+        if status_item:
+            status_item.setText(status_text)
+            status_item.setForeground(display_color)
+            status_item.setToolTip(tooltip)
+        
+        # Update foreground color for the entire row
+        if not is_enabled:
+            # Set all text to gray
+            for col in range(1, self.table.columnCount()):
+                item = self.table.item(row, col)
+                if item:
+                    item.setForeground(display_color)
+        else:
+            # Revert other columns to default text color
+            default_text_color = self.palette().color(self.foregroundRole())
+            for col in range(1, 4):
+                item = self.table.item(row, col)
+                if item:
+                    item.setForeground(default_text_color)
+            
+            # Set color for status column
+            if status_item:
+                status_item.setForeground(display_color)
 
 
     def load_mods(self, mods_dir_path: str = None):
@@ -266,49 +377,60 @@ class MainWindow(QWidget):
                 box_layout.setContentsMargins(0, 0, 0, 0)
                 box_layout.setAlignment(Qt.AlignCenter)
                 checkbox = QCheckBox()
+                # 체크박스 설정
+                checkbox = QCheckBox()
+                if not mod.get("enabled", True):
+                    checkbox.setEnabled(False)
                 box_layout.addWidget(checkbox)
                 self.table.setCellWidget(row, 0, box_widget)
 
-                self.table.setItem(row, 1, QTableWidgetItem(mod.get("file", "")))
+                # 나머지 셀 아이템 생성
+                file_item = QTableWidgetItem(mod.get("file", ""))
+                loaders_item = QTableWidgetItem(", ".join(mod.get("loaders", [])))
+                mc_version_item = QTableWidgetItem(mod.get("mc_version", "-"))
                 
-                # 로더 정보 설정
-                loaders = mod.get("loaders", [])
-                self.table.setItem(row, 2, QTableWidgetItem(", ".join(loaders)))
+                self.table.setItem(row, 1, file_item)
+                self.table.setItem(row, 2, loaders_item)
+                self.table.setItem(row, 3, mc_version_item)
 
-                # MC 버전 & 툴팁 설정
-                mc_version_str = mod.get("mc_version", "-")
-                mc_version_item = QTableWidgetItem(mc_version_str)
-                
+                # MC 버전 툴팁 설정
                 all_mc_versions = mod.get("all_mc_versions", [])
                 if all_mc_versions:
                     tooltip_text = "이 프로젝트가 지원하는 모든 버전:\n\n" + ", ".join(all_mc_versions)
                     mc_version_item.setToolTip(tooltip_text)
-                self.table.setItem(row, 3, mc_version_item)
                 
-                # 파일, 로더, MC 버전 셀은 선택만 가능하도록 설정
-                for col in range(1, 4):
-                    self.table.item(row, col).setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-
+                # 상태 아이템 생성 및 설정
+                is_enabled = mod.get("enabled", True)
                 status = mod.get("status", "")
-                status_item = QTableWidgetItem(status)
-                status_item.setTextAlignment(Qt.AlignCenter)
-                
-                if status == "업데이트 가능":
-                    status_item.setForeground(QColor("#f1c40f"))  # 노란색
-                elif status in ["최신 버전", "Modrinth 확인됨", "캐시됨"]:
-                    status_item.setForeground(QColor("#2ecc71"))  # 녹색
-                elif status in ["프로젝트 못찾음", "호환 버전 없음"]:
-                    status_item.setForeground(QColor("#e67e22"))  # 주황색
-                elif "버전 높음" in status:
-                    status_item.setForeground(QColor("#3498db"))  # 파란색
-                elif "오류" in status or "실패" in status:
-                    status_item.setForeground(QColor("#e74c3c"))  # 빨간색
+                tooltip_status = status
+                if not is_enabled:
+                    status_text = "비활성화됨"
+                    status_color = QColor("#808080") # 회색
+                    tooltip_status = f"원래 상태: {status}"
                 else:
-                    status_item.setForeground(QColor("#95a5a6"))  # 회색
-                
-                status_item.setToolTip(status)
+                    status_text = status
+                    # 상태별 색상 결정
+                    if status == "업데이트 가능": status_color = QColor("#f1c40f")
+                    elif status in ["최신 버전", "Modrinth 확인됨", "캐시됨"]: status_color = QColor("#2ecc71")
+                    elif "버전 높음" in status: status_color = QColor("#3498db")
+                    elif status in ["프로젝트 못찾음", "호환 버전 없음", "API 요청 실패", "API 응답 오류"]: status_color = QColor("#e67e22")
+                    elif "오류" in status or "실패" in status: status_color = QColor("#e74c3c")
+                    else: status_color = QColor("#95a5a6")
+
+                status_item = QTableWidgetItem(status_text)
+                status_item.setTextAlignment(Qt.AlignCenter)
+                status_item.setForeground(status_color)
+                status_item.setToolTip(tooltip_status)
                 self.table.setItem(row, 4, status_item)
-                self.table.item(row, 4).setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+
+                # 비활성화된 모드의 모든 셀 글자색 변경
+                if not is_enabled:
+                    for col in range(1, self.table.columnCount()):
+                        self.table.item(row, col).setForeground(status_color)
+
+                # 모든 셀은 선택만 가능하도록 설정 (체크박스 제외)
+                for col in range(1, self.table.columnCount()):
+                    self.table.item(row, col).setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             
             self.table.resizeColumnsToContents()
         except Exception as e:
@@ -345,6 +467,7 @@ class MainWindow(QWidget):
             
             self.refresh_btn.setEnabled(False)
             self.update_btn.setEnabled(False)
+            self.optimize_btn.setEnabled(False) # Disable optimize button during update
 
             self.update_worker = UpdateWorker(mods_to_update)
             self.update_worker.progress.connect(self._on_progress)
@@ -354,6 +477,48 @@ class MainWindow(QWidget):
             self.update_worker.error.connect(self._on_worker_error)
             self.update_worker.start()
             self.show_loading(f"{len(mods_to_update)}개 모드 업데이트 중...")
+
+    def _optimize_selected_mods(self):
+        selected_rows = []
+        for row in range(self.table.rowCount()):
+            checkbox = self.table.cellWidget(row, 0).layout().itemAt(0).widget()
+            if checkbox.isChecked():
+                selected_rows.append(row)
+        if not selected_rows:
+            QMessageBox.warning(self, "경고", "최적화할 모드를 선택하세요.")
+            return
+        
+        mods_to_optimize = []
+        for row in selected_rows:
+            mod = self.mods[row]
+            if "버전 높음" in mod.get("status", ""): # Check for "버전 높음" status
+                mods_to_optimize.append(mod)
+
+        if not mods_to_optimize:
+            QMessageBox.information(self, "알림", "선택된 모드 중 최적화 가능한 (버전이 높은) 항목이 없습니다.")
+            return
+
+        mod_names = ", ".join([f"'{m['mod_name']}'" for m in mods_to_optimize])
+        reply = QMessageBox.question(self, "버전 최적화 확인", f"{mod_names} 모드의 버전을 현재 마인크래프트 버전({self.selected_mc_version})에 맞게 최적화하시겠습니까?", QMessageBox.Yes | QMessageBox.No)
+        
+        if reply == QMessageBox.Yes:
+            if self.optimize_worker and self.optimize_worker.isRunning():
+                QMessageBox.warning(self, "경고", "이미 모드 최적화 작업이 진행 중입니다.")
+                return
+            
+            self.refresh_btn.setEnabled(False)
+            self.update_btn.setEnabled(False)
+            self.optimize_btn.setEnabled(False)
+
+            self.optimize_worker = OptimizeWorker(mods_to_optimize, self.selected_mc_version)
+            self.optimize_worker.progress.connect(self._on_progress)
+            self.optimize_worker.message.connect(self._on_message)
+            self.optimize_worker.eta.connect(self._on_eta)
+            self.optimize_worker.finished.connect(self._on_optimize_finished)
+            self.optimize_worker.error.connect(self._on_worker_error)
+            self.optimize_worker.start()
+            self.show_loading(f"{len(mods_to_optimize)}개 모드 버전 최적화 중...")
+
 
     def _on_update_finished(self):
         if self.loading:
@@ -367,6 +532,24 @@ class MainWindow(QWidget):
         
         self.refresh_btn.setEnabled(True)
         self.update_btn.setEnabled(True)
+        self.optimize_btn.setEnabled(True) # Re-enable optimize button
         QMessageBox.information(self, "완료", "모드 업데이트가 완료되었습니다.")
         self.load_mods()
         self.update_worker = None
+
+    def _on_optimize_finished(self):
+        if self.loading:
+            fade_out = QPropertyAnimation(self.loading, b"windowOpacity", self.loading)
+            fade_out.setStartValue(1.0)
+            fade_out.setEndValue(0.0)
+            fade_out.setDuration(300)
+            fade_out.finished.connect(self.loading.close)
+            fade_out.finished.connect(self.activateWindow)
+            fade_out.start()
+        
+        self.refresh_btn.setEnabled(True)
+        self.update_btn.setEnabled(True)
+        self.optimize_btn.setEnabled(True)
+        QMessageBox.information(self, "완료", "모드 버전 최적화가 완료되었습니다.")
+        self.load_mods()
+        self.optimize_worker = None
