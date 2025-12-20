@@ -3,8 +3,8 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QProgressBar, QApplication, QHeaderView, QMessageBox, QDialog,
     QFileDialog, QFrame, QMenu
 )
-from PySide6.QtCore import Qt, QPropertyAnimation
-from PySide6.QtGui import QColor, QFont, QAction
+from PySide6.QtCore import Qt, QPropertyAnimation, QUrl
+from PySide6.QtGui import QColor, QFont, QAction, QDesktopServices
 from pathlib import Path
 import os
 from gui.loader_worker import LoaderWorker
@@ -34,9 +34,13 @@ class MainWindow(QWidget):
         
         self.change_version_btn = QPushButton("버전 변경")
         self.change_version_btn.clicked.connect(self._change_mc_version)
+        
+        self.discord_btn = QPushButton("지원 디스코드")
+        self.discord_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://discord.gg/FzS6sPsr")))
 
         self.version_info_layout.addWidget(self.version_label)
         self.version_info_layout.addStretch()
+        self.version_info_layout.addWidget(self.discord_btn)
         self.version_info_layout.addWidget(self.change_version_btn)
         
         # 구분선
@@ -102,7 +106,6 @@ class MainWindow(QWidget):
         self.table.show()
 
         self.worker = None
-        self.show() # MainWindow를 먼저 표시
         self.load_mods()
 
     def _change_mc_version(self):
@@ -152,7 +155,7 @@ class MainWindow(QWidget):
             # Then update the view
             self._update_row_display(row)
         except OSError as e:
-            QMessageBox.critical(self, "오류", f"파일 이름 변경 실패: {e}")
+            QMessageBox.critical(self, "오류", f"파일 이름 변경 실패: {e}\n\n오류 제보: https://discord.gg/FzS6sPsr")
 
     def _update_row_display(self, row):
         mod = self.mods[row]
@@ -251,15 +254,23 @@ class MainWindow(QWidget):
 
     def show_log_dialog(self):
         dialog = LogViewerDialog(self)
+        
+        # 디스코드 버튼 추가
+        if dialog.layout():
+            discord_btn = QPushButton("지원 디스코드")
+            discord_btn.setMinimumWidth(150)
+            discord_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://discord.gg/FzS6sPsr")))
+            dialog.layout().addWidget(discord_btn)
+
         if dialog.exec() == QDialog.Accepted:
             self.load_mods()
 
     def _on_worker_error(self, error_message):
+        self.show()
         if self.loading:
             self.loading.close()
 
-        self.show()
-        QMessageBox.critical(self, "오류 발생!", f"작업 중 오류가 발생했습니다: {error_message}")
+        QMessageBox.critical(self, "오류 발생!", f"작업 중 오류가 발생했습니다: {error_message}\n\n오류 제보: https://discord.gg/FzS6sPsr")
         
         self.refresh_btn.setEnabled(True)
         self.update_btn.setEnabled(True)
@@ -267,10 +278,10 @@ class MainWindow(QWidget):
         self.update_worker = None
 
     def _on_mods_folder_not_found(self):
+        self.show()
         if self.loading:
             self.loading.close()
         
-        self.show()
         mods_path = get_mods_dir()
         self.table.hide()
         self.refresh_btn.hide()
@@ -349,9 +360,9 @@ class MainWindow(QWidget):
             fade_out.setStartValue(1.0)
             fade_out.setEndValue(0.0)
             fade_out.setDuration(300)
-            fade_out.finished.connect(self.loading.close)
             fade_out.finished.connect(self.show)
             fade_out.finished.connect(self.activateWindow)
+            fade_out.finished.connect(self.loading.close)
             fade_out.start()
         else:
             self.show()

@@ -16,7 +16,7 @@ class LogViewerDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("업데이트 로그")
-        self.resize(800, 600) # 조금 더 크게
+        self.resize(800, 600) # 창 크기 조절 (가로, 세로)
 
         # 테이블
         self.table = QTableWidget(0, 5)
@@ -26,7 +26,8 @@ class LogViewerDialog(QDialog):
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents) # 모드 이름
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents) # 변경 사항
         header.setSectionResizeMode(3, QHeaderView.Stretch)       # 파일 (경로가 길 수 있으므로)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents) # 작업
+        header.setSectionResizeMode(4, QHeaderView.Fixed) # 작업
+        self.table.verticalHeader().setDefaultSectionSize(50) # 행 높이를 50px로 증가
         
         self.close_btn = QPushButton("닫기")
         self.close_btn.setObjectName("closeButton") # QSS를 위한 Object Name
@@ -71,6 +72,7 @@ class LogViewerDialog(QDialog):
                 self.table.setItem(row, 3, QTableWidgetItem(f"{data.get('old_file', '')} -> {data.get('new_file', '')}"))
 
                 rollback_btn = QPushButton("롤백")
+                rollback_btn.setMinimumHeight(40) # 버튼 높이를 40px로 설정
                 # Store the necessary info for the rollback action
                 rollback_btn.setProperty("old_file", data["old_file"])
                 rollback_btn.setProperty("new_file", data["new_file"])
@@ -88,9 +90,7 @@ class LogViewerDialog(QDialog):
         # Manually adjust width for the "작업" column (index 4)
         # as resizeColumnsToContents might not account for QPushButton widgets correctly.
         # A width of around 80-100 pixels should be enough for "롤백" button.
-        current_width_col4 = self.table.columnWidth(4)
-        if current_width_col4 < 90: # Ensure it's at least 90 pixels wide
-            self.table.setColumnWidth(4, 90)
+        self.table.setColumnWidth(4, 120)
 
 
 
