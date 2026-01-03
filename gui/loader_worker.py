@@ -20,7 +20,6 @@ class LoaderWorker(QThread):
     def run(self):
         start_time = time.time()
         
-        # 1. 모드 스캔
         try:
             self.message.emit("모드 폴더를 스캔하는 중...")
             self.progress.emit(0)
@@ -40,11 +39,9 @@ class LoaderWorker(QThread):
             self.finished.emit([])
             return
             
-        # 2. 캐시 로드
         self.message.emit(f"총 {total}개의 모드를 찾았습니다. 캐시된 정보 확인 중...")
         cache = load_cache()
         
-        # 3. Modrinth에서 업데이트 확인
         self.message.emit("Modrinth에서 업데이트 확인 중...")
         
         updated_mods = []
@@ -52,7 +49,7 @@ class LoaderWorker(QThread):
             mod_key = f'{mod["mod_name"]}-{mod["mod_version"]}-{self.target_mc_version}'
             cached_mod = cache.get(mod_key)
             
-            # ETA 계산
+            # ETA 계산  
             elapsed_time = time.time() - start_time
             avg_time_per_mod = elapsed_time / (i + 1) if i > 0 else 0.5 # 첫번째는 0.5초로 가정
             remaining_mods = total - (i + 1)
