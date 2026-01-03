@@ -13,15 +13,24 @@ def main():
     """Application entry point."""
     app = QApplication(sys.argv)
 
+    # 폰트 로드 및 동적 폰트 이름 설정
+    font_name = "Arial"  # 기본 대체 폰트
     font_path = os.path.join(os.path.dirname(__file__), 'gui', 'font', 'PretendardVariable.ttf')
     if os.path.exists(font_path):
         font_id = QFontDatabase.addApplicationFont(font_path)
-        if font_id == -1:
+        if font_id != -1:
+            font_families = QFontDatabase.applicationFontFamilies(font_id)
+            if font_families:
+                font_name = font_families[0]
+                print(f"Font '{font_name}' loaded successfully.")
+            else:
+                print("Warning: Could not get font family name from loaded font.")
+        else:
             print(f"Warning: Failed to load font at '{font_path}'")
     else:
         print(f"Warning: Font file not found at '{font_path}'")
 
-    apply_global_style(app)
+    apply_global_style(app, font_name)
     selected_version = load_selected_version()
     
     if not selected_version:
