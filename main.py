@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import sys
+import os
 from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFontDatabase
 
 from gui.main_window import MainWindow
 from gui.version_dialog import VersionSelectionDialog
@@ -13,9 +14,15 @@ def main():
     app = QApplication(sys.argv)
     
     # 폰트 및 글로벌 스타일 적용
-    font = QFont()
-    font.setStyleHint(QFont.System)
-    app.setFont(font)
+    # 'Pretendard' 폰트 동적 로딩
+    font_path = os.path.join(os.path.dirname(__file__), 'gui', 'font', 'PretendardVariable.ttf')
+    if os.path.exists(font_path):
+        font_id = QFontDatabase.addApplicationFont(font_path)
+        if font_id == -1:
+            print(f"Warning: Failed to load font at '{font_path}'")
+    else:
+        print(f"Warning: Font file not found at '{font_path}'")
+
     apply_global_style(app)
 
     # --- 버전 선택 로직 ---

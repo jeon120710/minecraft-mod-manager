@@ -2,6 +2,7 @@ def apply_global_style(app):
     app.setStyleSheet("""
     /* 전역 설정 */
     QWidget {
+        font-family: 'Pretendard';
         background-color: #1e1f22; /* 매우 어두운 배경 */
         color: #e0e1e6; /* 밝은 텍스트 */
         font-size: 14px; /* 가독성을 위한 폰트 크기 증가 */
@@ -12,7 +13,7 @@ def apply_global_style(app):
     QPushButton {
         background-color: #7289da; /* 선명한 강조색 */
         color: #ffffff;
-        font-weight: bold;
+        font-weight: 600; /* Pretendard-SemiBold */
         border-radius: 8px; /* 부드러운 모서리 */
         padding: 10px 20px; /* 넉넉한 여백 */
         margin: 4px;
@@ -47,7 +48,7 @@ def apply_global_style(app):
         background-color: #1e1f22;
         color: #e0e1e6;
         padding: 8px;
-        font-weight: bold;
+        font-weight: 700; /* Pretendard-Bold */
         border-bottom: 2px solid #7289da; /* 헤더 구분선 강조 */
         border-right: 1px solid #4f535c;
     }

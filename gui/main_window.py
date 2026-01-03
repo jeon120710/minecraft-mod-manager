@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QTableWidget, QTableWidgetItem, QCheckBox, QHBoxLayout, QVBoxLayout,
     QPushButton, QLabel, QProgressBar, QApplication, QHeaderView, QMessageBox, QDialog,
-    QFileDialog, QFrame, QMenu
+    QFileDialog, QFrame, QMenu, QAbstractItemView
 )
 from PySide6.QtCore import Qt, QPropertyAnimation, QUrl
 from PySide6.QtGui import QColor, QFont, QAction, QDesktopServices
@@ -59,6 +59,7 @@ class MainWindow(QWidget):
 
         # --- 테이블 ---
         self.table = QTableWidget(0, 5)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setHorizontalHeaderLabels(["선택", "파일", "로더", "MC 버전", "상태"])
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.show_table_context_menu)
@@ -438,10 +439,6 @@ class MainWindow(QWidget):
                 if not is_enabled:
                     for col in range(1, self.table.columnCount()):
                         self.table.item(row, col).setForeground(status_color)
-
-                # 모든 셀은 선택만 가능하도록 설정 (체크박스 제외)
-                for col in range(1, self.table.columnCount()):
-                    self.table.item(row, col).setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             
             self.table.resizeColumnsToContents()
         except Exception as e:

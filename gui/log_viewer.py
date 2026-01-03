@@ -1,7 +1,7 @@
 import sys
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QTextEdit, QPushButton, QApplication, QTableWidget, 
-    QTableWidgetItem, QHeaderView, QMessageBox
+    QTableWidgetItem, QHeaderView, QMessageBox, QAbstractItemView
 )
 from PySide6.QtCore import Qt
 from pathlib import Path
@@ -20,6 +20,7 @@ class LogViewerDialog(QDialog):
 
         # 테이블
         self.table = QTableWidget(0, 5)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setHorizontalHeaderLabels(["날짜", "모드 이름", "변경 사항", "파일", "작업"])
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents) # 날짜
@@ -56,7 +57,7 @@ class LogViewerDialog(QDialog):
         log_pattern = re.compile(
             r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}): "
             r"(?P<mod_name>.*?) ?"  # Mod name (non-greedy), space is optional
-            r"(?P<versions>[\w\.\-]+\s->\s[\w\.\-]+)? ?" # Optional versions group
+            r"(?P<versions>[\w.+-]+\s->\s[\w.+-]+)? ?" # Optional versions group
             r"\(file: (?P<old_file>.*?) -> (?P<new_file>.*?)\)\s*$" # File changes, with optional trailing space
         )
 
