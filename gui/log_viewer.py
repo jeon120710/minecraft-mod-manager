@@ -26,7 +26,7 @@ class LogViewerDialog(QDialog):
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents) # 날짜
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents) # 모드 이름
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents) # 변경 사항
-        header.setSectionResizeMode(3, QHeaderView.Stretch)       # 파일 (경로가 길 수 있으므로)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)       # 파일
         header.setSectionResizeMode(4, QHeaderView.Fixed) # 작업
         self.table.verticalHeader().setDefaultSectionSize(50) # 행 높이를 50px로 증가
         
@@ -35,8 +35,8 @@ class LogViewerDialog(QDialog):
         self.close_btn.clicked.connect(self.close)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15) # 여백 추가
-        layout.setSpacing(10) # 간격 추가
+        layout.setContentsMargins(15, 15, 15, 15) # 여백 주기
+        layout.setSpacing(10) # 사이 간격!!
         layout.addWidget(self.table)
         layout.addWidget(self.close_btn, alignment=Qt.AlignRight)
 
@@ -53,12 +53,12 @@ class LogViewerDialog(QDialog):
         logs = LOG_FILE.read_text(encoding="utf-8").strip().split("\n")
         self.table.setRowCount(len(logs))
 
-        # Regex to parse the log entry
+        # 모드 이름 예외처리
         log_pattern = re.compile(
             r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}): "
-            r"(?P<mod_name>.*?) ?"  # Mod name (non-greedy), space is optional
-            r"(?P<versions>[\w.+-]+\s->\s[\w.+-]+)? ?" # Optional versions group
-            r"\(file: (?P<old_file>.*?) -> (?P<new_file>.*?)\)\s*$" # File changes, with optional trailing space
+            r"(?P<mod_name>.*?) ?"
+            r"(?P<versions>[\w.+-]+\s->\s[\w.+-]+)? ?"
+            r"\(file: (?P<old_file>.*?) -> (?P<new_file>.*?)\)\s*$"
         )
 
         for row, log_entry in enumerate(reversed(logs)): # Show newest first
@@ -80,17 +80,12 @@ class LogViewerDialog(QDialog):
                 rollback_btn.clicked.connect(self.rollback_triggered)
                 self.table.setCellWidget(row, 4, rollback_btn)
             else:
-                # Handle non-matching log entries (e.g., rollbacks, older formats)
-                # 정규식과 일치하지 않는 로그 처리 (예: 롤백 로그, 이전 형식의 로그)
                 timestamp, _, message = log_entry.partition(':')
                 self.table.setItem(row, 0, QTableWidgetItem(timestamp.strip()))
                 self.table.setItem(row, 1, QTableWidgetItem(message.strip()))
                 self.table.setSpan(row, 1, 1, 3) # Span message across 3 columns
 
         self.table.resizeColumnsToContents()
-        # Manually adjust width for the "작업" column (index 4)
-        # as resizeColumnsToContents might not account for QPushButton widgets correctly.
-        # A width of around 80-100 pixels should be enough for "롤백" button.
         self.table.setColumnWidth(4, 120)
 
 
